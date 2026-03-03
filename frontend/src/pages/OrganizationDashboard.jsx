@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { organizationAPI, projectAPI, publicAPI } from '../services/api';
 import { 
@@ -7,7 +7,9 @@ import {
   FiUserPlus, 
   FiTrendingUp,
   FiPackage,
-  FiCheck
+  FiCheck,
+  FiBell,
+  FiX
 } from 'react-icons/fi';
 
 function OrganizationDashboard() {
@@ -16,6 +18,8 @@ function OrganizationDashboard() {
   const [projects, setProjects] = useState([]);
   const [plans, setPlans] = useState([]);
   const [users, setUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showUpgradePlan, setShowUpgradePlan] = useState(false);
@@ -24,6 +28,7 @@ function OrganizationDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
+  const notificationRef = useRef(null);
 
   const [inviteData, setInviteData] = useState({ email: '', name: '', role: 'USER' });
   const [projectData, setProjectData] = useState({ name: '', description: '' });
@@ -40,19 +45,38 @@ function OrganizationDashboard() {
     loadData();
   }, []);
 
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotificationPanel(false);
+      }
+    };
+
+    if (showNotificationPanel) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotificationPanel]);
+
   const loadData = async () => {
     try {
-      const [subRes, projRes, usersRes, plansRes] = await Promise.all([
+      const [subRes, projRes, usersRes, plansRes, notifRes] = await Promise.all([
         organizationAPI.getSubscription(),
         projectAPI.getProjects(),
         organizationAPI.getUsers(),
-        publicAPI.getPlans()
+        publicAPI.getPlans(),
+        organizationAPI.getSubscriptionNotifications()
       ]);
       
       setSubscription(subRes.data);
       setProjects(projRes.data);
       setUsers(usersRes.data);
       setPlans(plansRes.data || []);
+      setNotifications(notifRes.data?.notifications || []);
     } catch (error) {
       console.error('Error loading data:', error);
       setError(error.message);
@@ -130,7 +154,7 @@ function OrganizationDashboard() {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Process the upgrade
-      await organizationAPI.upgradeSubscription(selectedPlan._id);
+      const result = await organizationAPI.upgradeSubscription(selectedPlan._id);
       
       // Reset form and close modal
       setShowPaymentModal(false);
@@ -147,7 +171,22 @@ function OrganizationDashboard() {
       // Reload data
       loadData();
       
-      alert(`Successfully upgraded to ${selectedPlan.name} plan! 🎉`);
+      // Show success message with remaining days info
+      const { remainingDaysAdded, newEndDate } = result.data || {};
+      let message = `Successfully upgraded to ${selectedPlan.name} plan! 🎉`;
+      
+      if (remainingDaysAdded && remainingDaysAdded > 0) {
+        message += `\n\n✨ Bonus: ${remainingDaysAdded} remaining day${remainingDaysAdded > 1 ? 's' : ''} from your previous subscription ${remainingDaysAdded > 1 ? 'have' : 'has'} been added!`;
+        if (newEndDate) {
+          message += `\nYour new subscription expires on ${new Date(newEndDate).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })}`;
+        }
+      }
+      
+      alert(message);
     } catch (error) {
       setError(error.message);
     } finally {
@@ -234,9 +273,120 @@ function OrganizationDashboard() {
               <h1 className="text-2xl font-bold text-gray-900">{user?.organizationName}</h1>
               <p className="text-sm text-gray-600">{user?.role} Dashboard</p>
             </div>
-            <button onClick={logout} className="btn-secondary">
-              Logout
-            </button>
+            <div className="flex items-center gap-4">
+              {/* Notification Bell */}
+              <div className="relative" ref={notificationRef}>
+                <button
+                  onClick={() => setShowNotificationPanel(!showNotificationPanel)}
+                  className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="Notifications"
+                >
+                  <FiBell className="text-2xl" />
+                  {notifications.length > 0 && (
+                    <span className="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-600 rounded-full">
+                      {notifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown Panel */}
+                {showNotificationPanel && (
+                  <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 max-h-96 overflow-y-auto">
+                    <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+                      <h3 className="font-semibold text-gray-900">Notifications</h3>
+                      <button
+                        onClick={() => setShowNotificationPanel(false)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        <FiX className="text-xl" />
+                      </button>
+                    </div>
+
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <FiBell className="mx-auto text-4xl text-gray-300 mb-3" />
+                        <p className="text-gray-500 text-sm">No notifications</p>
+                        <p className="text-gray-400 text-xs mt-1">You're all caught up!</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-100">
+                        {notifications.map((notif, index) => (
+                          <div
+                            key={index}
+                            className={`p-4 hover:bg-gray-50 transition-colors ${
+                              notif.severity === 'high' ? 'bg-red-50' : 'bg-yellow-50'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                  notif.severity === 'high' ? 'bg-red-500' : 'bg-yellow-500'
+                                }`}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className={`font-semibold text-sm mb-1 ${
+                                    notif.severity === 'high' ? 'text-red-900' : 'text-yellow-900'
+                                  }`}
+                                >
+                                  {notif.title}
+                                </p>
+                                <p
+                                  className={`text-sm mb-2 ${
+                                    notif.severity === 'high' ? 'text-red-700' : 'text-yellow-700'
+                                  }`}
+                                >
+                                  {notif.message}
+                                </p>
+                                {notif.daysRemaining !== undefined && notif.daysRemaining >= 0 && (
+                                  <p
+                                    className={`text-xs font-medium mb-2 ${
+                                      notif.severity === 'high' ? 'text-red-600' : 'text-yellow-600'
+                                    }`}
+                                  >
+                                    {notif.daysRemaining === 0
+                                      ? '⏰ Expires today!'
+                                      : `⏱️ ${notif.daysRemaining} day${
+                                          notif.daysRemaining > 1 ? 's' : ''
+                                        } remaining`}
+                                  </p>
+                                )}
+                                {notif.actionRequired && user?.role === 'ORG_ADMIN' && (
+                                  <button
+                                    onClick={() => {
+                                      setShowNotificationPanel(false);
+                                      if (
+                                        notif.type === 'subscription_expired' ||
+                                        notif.type === 'grace_period'
+                                      ) {
+                                        handleReactivateSubscription();
+                                      } else {
+                                        setShowUpgradePlan(true);
+                                      }
+                                    }}
+                                    className={`text-xs px-3 py-1.5 rounded font-medium ${
+                                      notif.severity === 'high'
+                                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                                        : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                                    }`}
+                                  >
+                                    {notif.actionText || 'Take Action'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={logout} className="btn-secondary">
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -245,6 +395,70 @@ function OrganizationDashboard() {
         {error && (
           <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-4">
             {error}
+          </div>
+        )}
+
+        {/* Subscription Notifications */}
+        {notifications && notifications.length > 0 && (
+          <div className="mb-6 space-y-3">
+            {notifications.map((notif, index) => (
+              <div
+                key={index}
+                className={`rounded-lg border-l-4 p-4 ${
+                  notif.severity === 'high'
+                    ? 'bg-red-50 border-red-500'
+                    : 'bg-yellow-50 border-yellow-500'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3
+                      className={`font-semibold mb-1 ${
+                        notif.severity === 'high' ? 'text-red-800' : 'text-yellow-800'
+                      }`}
+                    >
+                      {notif.title}
+                    </h3>
+                    <p
+                      className={`text-sm mb-2 ${
+                        notif.severity === 'high' ? 'text-red-700' : 'text-yellow-700'
+                      }`}
+                    >
+                      {notif.message}
+                    </p>
+                    {notif.daysRemaining !== undefined && notif.daysRemaining >= 0 && (
+                      <p
+                        className={`text-xs font-medium ${
+                          notif.severity === 'high' ? 'text-red-600' : 'text-yellow-600'
+                        }`}
+                      >
+                        {notif.daysRemaining === 0
+                          ? 'Expires today!'
+                          : `${notif.daysRemaining} day${notif.daysRemaining > 1 ? 's' : ''} remaining`}
+                      </p>
+                    )}
+                  </div>
+                  {notif.actionRequired && user?.role === 'ORG_ADMIN' && (
+                    <button
+                      onClick={() => {
+                        if (notif.type === 'subscription_expired' || notif.type === 'grace_period') {
+                          handleReactivateSubscription();
+                        } else {
+                          setShowUpgradePlan(true);
+                        }
+                      }}
+                      className={`ml-4 px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap ${
+                        notif.severity === 'high'
+                          ? 'bg-red-600 hover:bg-red-700 text-white'
+                          : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                      }`}
+                    >
+                      {notif.actionText || 'Take Action'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

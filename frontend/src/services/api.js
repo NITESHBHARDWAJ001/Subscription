@@ -57,6 +57,7 @@ export const organizationAPI = {
   inviteUser: (data) => api.post('/organization/invite', data),
   getUsers: () => api.get('/organization/users'),
   getSubscription: () => api.get('/organization/subscription'),
+  getSubscriptionNotifications: () => api.get('/organization/subscription/notifications'),
   upgradeSubscription: (planId) => api.put('/organization/subscription/upgrade', { planId }),
   cancelSubscription: (reason) => api.put('/organization/subscription/cancel', { reason }),
   reactivateSubscription: () => api.put('/organization/subscription/reactivate'),

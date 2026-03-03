@@ -7,6 +7,7 @@ const {
   cancelSubscription,
   reactivateSubscription,
   getSubscriptionHistory,
+  getSubscriptionNotifications,
   getUsers
 } = require('../controllers/organizationController');
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -25,6 +26,7 @@ router.get('/users', authorize('ORG_ADMIN'), getUsers);
 // Subscription routes - any authenticated user can view
 router.get('/subscription', getSubscription);
 router.get('/subscription/history', getSubscriptionHistory);
+router.get('/subscription/notifications', getSubscriptionNotifications);
 
 // Upgrade/Cancel/Reactivate subscription - ORG_ADMIN only
 router.put('/subscription/upgrade', authorize('ORG_ADMIN'), upgradeSubscription);
