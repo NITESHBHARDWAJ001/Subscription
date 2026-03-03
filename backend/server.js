@@ -10,6 +10,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const organizationRoutes = require('./routes/organizationRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const systemRoutes = require('./routes/systemRoutes');
 
 const app = express();
 
@@ -60,6 +61,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/organization', organizationRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/system', systemRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -72,6 +74,7 @@ app.get('/', (req, res) => {
       organization: '/api/organization/*',
       projects: '/api/projects/*',
       public: '/api/public/*',
+      system: '/api/system/*',
       health: '/health'
     }
   });
